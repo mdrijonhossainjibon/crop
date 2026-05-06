@@ -77,9 +77,6 @@
         @keyframes modal-in{0%{opacity:0;transform:scale(.85)}100%{opacity:1;transform:scale(1)}}
         .modal-enter{animation:modal-in .35s cubic-bezier(.16,1,.3,1) forwards}
 
-        @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-        .spin{animation:spin 1s linear infinite}
-
         ::-webkit-scrollbar{width:6px}
         ::-webkit-scrollbar-track{background:rgba(255,255,255,.02)}
         ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
@@ -128,7 +125,7 @@
                     <span class="bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">3×3 grids</span>
                 </h2>
                 <p class="text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
-                    Upload 1–20 images at once. Each gets sliced into 9 tiles. Download all tiles as a single ZIP.
+                    Upload 1–20 images at once. Each gets sliced into 9 tiles. Download all tiles as a single ZIP — flat list, no folders.
                 </p>
             </div>
 
@@ -288,7 +285,6 @@
             };
         }
 
-        // Synchronous tile render — image already loaded in memory
         function renderTileCanvas(imgEl, tileIndex, layout) {
             var rect = getTileRect(tileIndex, layout);
             var canvas = document.createElement('canvas');
@@ -297,7 +293,6 @@
             return canvas;
         }
 
-        // Load image once, return promise
         function loadImage(src) {
             return new Promise(function(resolve, reject) {
                 var img = new Image();
@@ -309,11 +304,9 @@
 
         // ==========================================
         // ROBUST download trigger
-        // URL revoke দেরিতে হবে, যাতে ডাউনলোড শুরু হতে পারে
         // ==========================================
         function triggerDownload(blob, filename) {
             try {
-                // MS Edge/IE fallback
                 if (window.navigator && window.navigator.msSaveOrOpenBlob) {
                     window.navigator.msSaveOrOpenBlob(blob, filename);
                     return;
@@ -327,7 +320,6 @@
                 a.style.top = '-9999px';
                 document.body.appendChild(a);
                 a.click();
-                // ডাউনলোড শুরু হওয়ার জন্য ১৫ সেকেন্ড অপেক্ষা করে URL মুছব
                 setTimeout(function() {
                     try { document.body.removeChild(a); } catch(e) {}
                     URL.revokeObjectURL(url);
@@ -335,6 +327,16 @@
             } catch (err) {
                 showToast('Download failed: ' + err.message, 'error');
             }
+        }
+
+        // ==========================================
+        // Flat tile filename — কোনো ফোল্ডার নেই
+        // উদাহরণ: myImage_tile_1-1.png
+        // ==========================================
+        function flatTileName(imageName, tileIndex) {
+            var col = tileIndex % 3;
+            var row = Math.floor(tileIndex / 3);
+            return imageName + '_tile_' + (row + 1) + '-' + (col + 1) + '.png';
         }
 
         // ==========================================
@@ -394,11 +396,11 @@
             document.getElementById('summarySub').textContent =
                 totalTiles + ' tiles ready to download';
             document.getElementById('downloadInfo').textContent =
-                totalTiles + ' PNG tiles will be packed into a single ZIP file';
+                totalTiles + ' PNG tiles — flat list in one ZIP, no sub-folders';
         }
 
         // ==========================================
-        // File handling — SINGLE unified handler
+        // File handling
         // ==========================================
         function processFiles(files) {
             var validFiles = [];
@@ -505,7 +507,7 @@
                     '</div>';
 
                 var dlBtn = document.createElement('button');
-                dlBtn.className = 'w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-cyan-500/20 flex items-center justify-center transition-colors flex-shrink-0';
+                dlBtn.className = 'single-dl-btn w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-cyan-500/20 flex items-center justify-center transition-colors flex-shrink-0';
                 dlBtn.setAttribute('aria-label', 'Download this image tiles');
                 dlBtn.dataset.imageId = item.id;
                 dlBtn.innerHTML = '<i class="fas fa-download text-[10px] text-white/40"></i>';
@@ -553,21 +555,18 @@
                 cardsContainer.appendChild(card);
             });
 
-            // Single download buttons — event delegation approach
-            cardsContainer.addEventListener('click', function(e) {
-                var btn = e.target.closest('.single-dl-btn, [data-image-id]');
-                if (btn && btn.closest('.img-card')) {
-                    // Check if it's the download icon button
-                    if (btn.dataset.imageId && btn.querySelector('.fa-download')) {
-                        e.stopPropagation();
-                        downloadSingleImage(parseInt(btn.dataset.imageId));
-                    }
+            // Single download button delegation
+            cardsContainer.onclick = function(e) {
+                var btn = e.target.closest('.single-dl-btn');
+                if (btn && btn.dataset.imageId) {
+                    e.stopPropagation();
+                    downloadSingleImage(parseInt(btn.dataset.imageId));
                 }
-            });
+            };
         }
 
         // ==========================================
-        // Download single image's 9 tiles
+        // Download single image's 9 tiles — ফ্ল্যাট ZIP
         // ==========================================
         async function downloadSingleImage(imageId) {
             var item = imageStore.find(function(i) { return i.id === imageId; });
@@ -583,9 +582,8 @@
                     var blob = await new Promise(function(resolve) {
                         canvas.toBlob(resolve, 'image/png');
                     });
-                    var col = t % 3;
-                    var row = Math.floor(t / 3);
-                    zip.file(item.name + '_tile_' + (row+1) + '-' + (col+1) + '.png', blob);
+                    // ফ্ল্যাট — কোনো সাব-ফোল্ডার নেই
+                    zip.file(flatTileName(item.name, t), blob);
                 }
 
                 var content = await zip.generateAsync({ type: 'blob' });
@@ -597,7 +595,7 @@
         }
 
         // ==========================================
-        // Download ALL tiles
+        // Download ALL tiles — সব ফ্ল্যাট লিস্টে, কোনো ফোল্ডার নেই
         // ==========================================
         async function downloadAllTiles() {
             if (imageStore.length === 0 || isDownloading) return;
@@ -622,9 +620,9 @@
                         var blob = await new Promise(function(resolve) {
                             canvas.toBlob(resolve, 'image/png');
                         });
-                        var col = t % 3;
-                        var row = Math.floor(t / 3);
-                        zip.file(item.name + '/tile_' + (row+1) + '-' + (col+1) + '.png', blob);
+                        // ফ্ল্যাট — ইমেজনাম_tile_রো-কলাম.png
+                        // কোনো "/" নেই, তাই সাব-ফোল্ডার তৈরি হবে না
+                        zip.file(flatTileName(item.name, t), blob);
                     }
                 }
 
@@ -653,8 +651,6 @@
             loadImage(item.src).then(function(imgEl) {
                 var canvas = renderTileCanvas(imgEl, tileIndex, item.layout);
                 modalImage.src = canvas.toDataURL('image/png');
-                var col = tileIndex % 3;
-                var row = Math.floor(tileIndex / 3);
                 modalLabel.textContent = item.name + ' \u2014 Tile ' + tileLabels[tileIndex] + ' (' + canvas.width + '\u00d7' + canvas.height + 'px)';
                 modal.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
@@ -695,7 +691,7 @@
         }
 
         // ==========================================
-        // Event Listeners — no duplicates
+        // Event Listeners
         // ==========================================
         uploadArea.addEventListener('click', function() {
             fileInput.value = '';
@@ -707,14 +703,11 @@
             }
         });
 
-        // SINGLE file change handler
         fileInput.addEventListener('change', function() {
             if (!this.files || this.files.length === 0) return;
-            var files = this.files;
-            processFiles(files);
+            processFiles(this.files);
         });
 
-        // Drag & drop
         uploadArea.addEventListener('dragover', function(e) {
             e.preventDefault(); e.stopPropagation();
             this.classList.add('drag-over');
@@ -729,7 +722,6 @@
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
         });
 
-        // Paste
         document.addEventListener('paste', function(e) {
             var items = e.clipboardData && e.clipboardData.items;
             if (!items) return;
@@ -740,19 +732,15 @@
             if (files.length > 0) processFiles(files);
         });
 
-        // Add More
         addMoreBtn.addEventListener('click', function() {
             fileInput.value = '';
             fileInput.click();
         });
 
-        // Reset
         resetBtn.addEventListener('click', function() { switchState('upload'); });
 
-        // Download ALL
         downloadAllBtn.addEventListener('click', downloadAllTiles);
 
-        // Modal
         modalCloseBtn.addEventListener('click', closeModal);
         modalBackdrop.addEventListener('click', closeModal);
         modalDownloadBtn.addEventListener('click', function() {
@@ -764,9 +752,7 @@
                 var canvas = renderTileCanvas(imgEl, currentModalTile.tileIndex, item.layout);
                 canvas.toBlob(function(blob) {
                     if (!blob) { showToast('Failed to generate tile', 'error'); return; }
-                    var col = currentModalTile.tileIndex % 3;
-                    var row = Math.floor(currentModalTile.tileIndex / 3);
-                    triggerDownload(blob, item.name + '_tile_' + (row+1) + '-' + (col+1) + '.png');
+                    triggerDownload(blob, flatTileName(item.name, currentModalTile.tileIndex));
                     showToast('Tile downloaded', 'success');
                 }, 'image/png');
             });
