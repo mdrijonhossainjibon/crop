@@ -1,0 +1,19 @@
+{
+  "models": {
+    "kbs": {
+      "version": "1.0.0",
+      "size_bytes": 12273096,
+      "sha256": null
+    },
+    "aws": {
+      "version": "1.0.0",
+      "size_bytes": 12270710,
+      "sha256": null
+    },
+    "kb-login": {
+      "version": "1.0.0",
+      "size_bytes": 12270710,
+      "sha256": null
+    }
+  }
+}
